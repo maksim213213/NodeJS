@@ -1,0 +1,2 @@
+Run the program twice to see SUCCESS followed by SKIPPED.
+Add, delete, or rename a top-level file to trigger another backup.

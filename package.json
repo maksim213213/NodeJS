@@ -1,0 +1,20 @@
+{
+  "name": "lab1-standard-library",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A filename-based backup CLI built with the Node.js standard library.",
+  "scripts": {
+    "start": "ts-node ./src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test test/backup.test.cjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.3"
+  }
+}
