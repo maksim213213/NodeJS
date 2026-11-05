@@ -1,2 +1,0 @@
-This is a sample file for Lab 1.
-The backup decision depends on filenames, not file contents.

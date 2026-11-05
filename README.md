@@ -1,108 +1,170 @@
-# Lab 1 Standard Library
+# TypeScript HTTP Server
 
-This command-line program creates a gzip-compressed tar archive when the names of files directly inside a source directory change. It uses the Node.js standard library and the system `tar` executable. TypeScript and ts-node are development tools only.
+A Node.js HTTP server written in TypeScript. It has two endpoints:
 
-## Requirements
+- `GET /search` validates and returns a search query.
+- `POST /users` validates a JSON object and returns the user data.
 
-- Node.js 22 or newer and npm.
-- GNU tar or bsdtar on `PATH`, with support for `--null` and `-T`.
+## 1. Start the server
 
-Check the available tools:
+Requirements: **Node.js 22 or newer** and **npm**.
 
-```powershell
-node --version
-npm.cmd --version
-tar --version
-```
-
-## Install and run
-
-Open PowerShell in this project directory:
+Run these commands from the project directory:
 
 ```powershell
-cd "$env:USERPROFILE\Documents\NodeJS\Lab1"
-npm.cmd install
-npm.cmd start -- ./source ./backups
+npm ci
+npm start
 ```
 
-The direct invocation from the assignment also works with the locally installed ts-node:
-
-```powershell
-npx.cmd ts-node ./src/index.ts ./source ./backups
-```
-
-Some Windows builds of the system tar fail on Cyrillic filenames. If Git for Windows is installed in its default location, select its GNU tar for the current PowerShell session:
-
-```powershell
-$env:TAR_COMMAND = 'C:\Program Files\Git\usr\bin\tar.exe'
-$env:Path = 'C:\Program Files\Git\usr\bin;' + $env:Path
-npm.cmd start -- ./source ./backups
-```
-
-`TAR_COMMAND` is optional; by default the program runs `tar` from `PATH`. The added Git directory also makes GNU tar's `gzip` helper available. No system settings are changed. The included compatibility test checks Cyrillic filenames using Git's tar when available on Windows.
-
-Exactly two arguments are required. Relative paths are resolved from the current working directory. Put paths containing spaces in quotes.
-
-Run the same command again to get `SKIPPED: No changes detected`. Add a file to the sample source directory, then run it again to create another archive:
-
-```powershell
-Set-Content -LiteralPath ./source/new-file.txt -Value 'New file'
-npm.cmd start -- ./source ./backups
-```
-
-## Behavior
-
-1. Create the backup directory if necessary.
-2. Read only regular files directly inside the source directory. Ignore subdirectories and symbolic links.
-3. Sort their names, serialize the list with `JSON.stringify`, and calculate its SHA-256 hash.
-4. Read the most recent `HASH: ` line from `backup_log.txt` in the backup directory. A missing log means this is the first run.
-5. Skip archiving when the hashes match.
-6. Otherwise, run `tar` and archive exactly the listed files. Empty source directories produce valid empty archives.
-7. Append the success result and new hash to the log only after `tar` succeeds.
-8. On failure, append a `FAILED` entry and set a nonzero exit code. A failed `tar` command does not update the saved hash, and any partially created archive is removed.
-
-The archive name includes an ISO timestamp with colons and the decimal point replaced by hyphens, for example `backup-2026-10-16T12-30-45-123Z.tar.gz`.
-
-The tar arguments `-c`, `-z`, and `-f` create a gzip-compressed archive at the specified path. `-C` selects the source directory. `-T -` reads the filename list from standard input, and `--null` makes the list NUL-separated. Each filename is prefixed with `./`. The program launches tar directly with an argument array.
-
-Tar runs with the backup directory as its working directory and receives the archive's basename. This also supports GNU tar on Windows without interpreting a drive letter in the archive path as a remote hostname.
-
-Example log:
+The terminal should display:
 
 ```text
-2026-10-16T12:30:45.123Z: SUCCESS: Backup created
-HASH: <64 hexadecimal SHA-256 characters>
-2026-10-16T12:31:45.123Z: SKIPPED: No changes detected
-2026-10-16T12:32:45.123Z: FAILED: tar command failed
+Server listening on http://127.0.0.1:3000
 ```
 
-## Assignment limits
+Keep this terminal open. Use a second terminal for the commands below.
+Press **Ctrl+C** in the first terminal to stop the server.
 
-Changing a file's contents without changing its name does not trigger a backup. Adding, deleting, or renaming a top-level regular file does trigger one. Changes inside subdirectories are ignored.
+The default address is `http://127.0.0.1:3000`. You can change it using the
+`HOST` and `PORT` environment variables.
 
-Use a dedicated backup directory for each source directory, and run one instance at a time. The log stores one sequence of filename hashes. The source and backup directories must be different; storing backups outside the source directory is recommended. If the backup directory or log is not writable, the program reports the failure in the terminal because it cannot write the log. Invalid command-line arguments are also reported in the terminal.
+## 2. Try GET /search
 
-## Verification
+Open [http://127.0.0.1:3000/search?q=node](http://127.0.0.1:3000/search?q=node)
+in a browser, or run this PowerShell command to see the status and headers:
 
 ```powershell
-npm.cmd run typecheck
-npm.cmd test
+curl.exe -i "http://127.0.0.1:3000/search?q=node"
 ```
 
-Tests run the compiled CLI in temporary directories. They verify first-run backups, unchanged filenames, content-only changes, added/deleted/renamed files, ignored nested files, empty sources, paths and names with spaces and Unicode, command-line validation, and failure recovery after tar is unavailable. They also check archive contents and extraction.
+The server responds with **200 OK**:
 
-Build and run the JavaScript version:
+```json
+{
+  "q": "node"
+}
+```
+
+The `q` parameter must contain at least one non-whitespace character.
+A missing `q`, an empty value (`?q=`), or only spaces produces **400 Bad Request**.
+A valid value is returned unchanged. If `q` is repeated, the first value is used.
+
+## 3. Try POST /users
+
+Send a JSON object with `Content-Type: application/json`. Both fields are required:
+
+| Field | Accepted value |
+| --- | --- |
+| `name` | A non-empty string. Leading and trailing whitespace is removed. |
+| `age` | An integer from `0` to `9007199254740991`. Strings such as `"25"` are rejected. |
+
+The root value must be an object. Values such as `null`, arrays, strings, and
+numbers are rejected. Additional fields are ignored.
+
+Run in PowerShell:
 
 ```powershell
-npm.cmd run build
-node ./dist/index.js ./source ./backups
+Invoke-RestMethod -Method Post `
+  -Uri 'http://127.0.0.1:3000/users' `
+  -ContentType 'application/json' `
+  -Body '{"name":"Anna","age":25,"extra":"ignored"}' |
+  ConvertTo-Json
 ```
 
-## Files
+The server responds with **201 Created** and only the allowed fields:
 
-- `src/index.ts`: complete application code.
-- `source/`: sample input files.
-- `test/backup.test.cjs`: integration tests using `node:test`.
-- `tsconfig.json`: TypeScript compiler settings.
-- `package.json`: npm commands and development dependencies.
-- `backups/`: generated archives and `backup_log.txt`, created by the first run.
+```json
+{
+  "name": "Anna",
+  "age": 25
+}
+```
+
+This exercise returns the validated user data without saving it to a database.
+
+## 4. Response statuses
+
+Responses use `Content-Type: application/json; charset=utf-8`.
+Errors contain an `error` field, for example:
+
+```json
+{
+  "error": "Not Found"
+}
+```
+
+| Status | When it is returned |
+| --- | --- |
+| **200 OK** | `GET /search` receives a valid `q`. |
+| **201 Created** | `POST /users` receives valid user data. |
+| **400 Bad Request** | Missing or blank `q`; empty or malformed JSON; invalid UTF-8, root value, or user fields; malformed HTTP request. |
+| **404 Not Found** | The path is neither `/search` nor `/users`. |
+| **405 Method Not Allowed** | A known path receives an unsupported method. The response includes `Allow: GET` for `/search` or `Allow: POST` for `/users`. |
+| **408 Request Timeout** | The request body is not fully received within 10 seconds. |
+| **413 Payload Too Large** | The declared or received body size exceeds 1 MiB. |
+| **415 Unsupported Media Type** | Content type is missing or is not `application/json`, or an unsupported charset or content encoding is declared. |
+| **417 Expectation Failed** | The request contains an unsupported `Expect` header. |
+| **431 Request Header Fields Too Large** | HTTP headers exceed the Node.js header-size limit. |
+| **500 Internal Server Error** | An unexpected server error occurs. |
+
+Paths must match exactly: `/search/` and `/users/` return `404`.
+The server checks the path before the method, so an unknown path returns `404`
+regardless of the method. HTTP `HEAD` responses contain headers without a body.
+
+### Body size limit
+
+The limit for `POST /users` is **1 MiB = 1,048,576 bytes**.
+A body exactly at the limit is allowed.
+
+- An oversized `Content-Length` produces `413` immediately, before body reading.
+- The server also counts received bytes, including for chunked uploads without
+  `Content-Length`. An oversized stream is stopped and the connection is closed.
+- The limit counts UTF-8 bytes. The entire body must arrive within 10 seconds.
+
+JSON must use UTF-8. An optional `charset=utf-8` parameter is accepted.
+Compressed bodies, such as those using `Content-Encoding: gzip`, are rejected.
+
+### Check error responses manually
+
+Run these commands in PowerShell. The `-i` flag shows the HTTP status and headers.
+
+```powershell
+# 400: q is missing
+curl.exe -i "http://127.0.0.1:3000/search"
+
+# 404: unknown path
+curl.exe -i "http://127.0.0.1:3000/hello"
+
+# 405: /search only accepts GET
+curl.exe -i -X POST "http://127.0.0.1:3000/search?q=node"
+
+# 413: Content-Length exceeds the limit; no body is sent
+curl.exe -i -X POST "http://127.0.0.1:3000/users" -H "Content-Type: application/json" -H "Content-Length: 1048577"
+```
+
+## 5. Run the tests
+
+```powershell
+npm test
+```
+
+There are **three tests**:
+
+| Type | What it checks |
+| --- | --- |
+| Unit | `q=node` is accepted; missing, empty, and whitespace-only queries are rejected. |
+| Unit | Extra user fields are ignored; a `null` body is rejected. |
+| Integration | A real HTTP request creates a user with `201`; oversized `Content-Length` receives `413` without sending a body. |
+
+The integration test starts its own server on an available port and closes it
+when finished. You do not need to run `npm start` before running the tests.
+
+## 6. Other commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run build` | Compile TypeScript into `dist/`. |
+| `node dist/index.js` | Start the compiled server after building. |
+| `npm run typecheck` | Check TypeScript without creating output files. |
+| `npm run test:unit` | Build and run the two unit tests. |
+| `npm run test:integration` | Build and run the integration test. |
